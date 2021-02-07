@@ -15,12 +15,15 @@
  */
 #include QMK_KEYBOARD_H
 #include <stdio.h>
+#include <string.h>
 
 char wpm_str[10];
+char mod_info[15];
 uint16_t copy_paste_timer;
 
 enum layers {
-    QWERTY = 0,
+    QWERTZ = 0,
+    COLEMAK_DH,
     LOWER,
     RAISE,
     NAV,
@@ -43,13 +46,34 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
  * | LCTL   |   Z  |   X  |   C  |   V  |   B  | CCCV |PScrn |  | Del  |Enter |   N  |   M  | ,  < | . >  | /  ? |  - _   |
  * `----------------------+------+------+------+------+------|  |------+------+------+------+------+----------------------'
  *                        | GUI  | Alt  |      | Space| Enter|  | Bspc | Space|      | Tab  | AltGr|
- *                        |      |      | Lower| Shift|  |      | Nav  | Raise|      |      |
+ *                        |      |      | Lower| Shift|  |      | Nav  | Raise|      |      |,
  *                        `----------------------------------'  `----------------------------------'
  */
-    [QWERTY] = LAYOUT(
+    [QWERTZ] = LAYOUT(
       KC_ESC,  KC_Q,   KC_W,   KC_E,   KC_R,   KC_T,                                         						  KC_Z,    KC_U,    KC_I,    KC_O,    KC_P,    KC_PIPE,
       KC_LSFT, KC_A,   KC_S,   KC_D,   KC_F,   KC_G,                                         					      KC_H,    KC_J,    KC_K,    KC_L,    KC_SCLN, KC_QUOT,
       KC_LCTL, KC_Y,   KC_X,   KC_C,   KC_V,   KC_B,   KC_CCCV,   KC_PSCR,             				KC_DEL, KC_ENT,  KC_N,    KC_M,    KC_COMM, KC_DOT,  KC_SLSH, KC_MINS,
+        KC_LGUI, KC_LALT, MO(LOWER), MT(MOD_LSFT, KC_BSPC), MT(MOD_LALT, KC_ENT),             KC_BSPC, LT(NAV, KC_SPC), MO(RAISE), KC_TAB, KC_RALT
+    ),
+
+/* 
+ * COLEMAK_DH Layer: COLEMAK-DH
+ *
+ * ,-------------------------------------------.                              ,-------------------------------------------.
+ * | ESC    |   Q  |   W  |   E  |   R  |   T  |                              |   Y  |   U  |   I  |   O  |   P  |  | \   |
+ * |--------+------+------+------+------+------|                              |------+------+------+------+------+--------|
+ * | LSFT   |   A  |   S  |  D   |   F  |   G  |                              |   H  |   J  |   K  |   L  | ;  : |  ' "   |
+ * |--------+------+------+------+------+------+-------------.  ,-------------+------+------+------+------+------+--------|
+ * | LCTL   |   Z  |   X  |   C  |   V  |   B  | CCCV |PScrn |  | Del  |Enter |   N  |   M  | ,  < | . >  | /  ? |  - _   |
+ * `----------------------+------+------+------+------+------|  |------+------+------+------+------+----------------------'
+ *                        | GUI  | Alt  |      | Space| Enter|  | Bspc | Space|      | Tab  | AltGr|
+ *                        |      |      | Lower| Shift|  |      | Nav  | Raise|      |      |
+ *                        `----------------------------------'  `----------------------------------'
+ */
+    [COLEMAK_DH] = LAYOUT(
+      KC_ESC,  KC_Q,   KC_W,   KC_F,   KC_P,   KC_B,                                         						  KC_J,    KC_L,    KC_U,    KC_Y,    KC_SCLN,    KC_PIPE,
+      KC_LSFT, KC_A,   KC_R,   KC_S,   KC_T,   KC_G,                                         					      KC_M,    KC_N,    KC_E,    KC_I,    KC_O, KC_QUOT,
+      KC_LCTL, KC_Z,   KC_X,   KC_C,   KC_D,   KC_V,   KC_CCCV,   KC_PSCR,             				KC_DEL, KC_ENT,  KC_K,    KC_H,    KC_COMM, KC_DOT,  KC_SLSH, KC_MINS,
         KC_LGUI, KC_LALT, MO(LOWER), MT(MOD_LSFT, KC_BSPC), MT(MOD_LALT, KC_ENT),             KC_BSPC, LT(NAV, KC_SPC), MO(RAISE), KC_TAB, KC_RALT
     ),
 /*
@@ -127,8 +151,8 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
  *                        `----------------------------------'  `----------------------------------'
  */
     [ADJUST] = LAYOUT(
-      _______, RGB_MOD, RGB_RMOD, RGB_SPI, RGB_SPD, _______,                                    _______, KC_F7,   KC_F8,   KC_F9,   KC_F10,  _______,
-      _______, RGB_TOG, RGB_SAI, RGB_HUI, RGB_VAI, _______,                                     _______, KC_F4,   KC_F5,   KC_F6,   KC_F11,  _______,
+      DF(QWERTZ), RGB_MOD, RGB_RMOD, RGB_SPI, RGB_SPD, _______,                                    _______, KC_F7,   KC_F8,   KC_F9,   KC_F10,  _______,
+      DF(COLEMAK_DH), RGB_TOG, RGB_SAI, RGB_HUI, RGB_VAI, _______,                                     _______, KC_F4,   KC_F5,   KC_F6,   KC_F11,  _______,
       _______, _______, RGB_SAD, RGB_HUD, RGB_VAD, _______, _______, _______, _______, _______, _______, KC_F1,   KC_F2,   KC_F3,   KC_F12,  _______,
                                  _______, _______, _______, _______, _______, _______, _______, _______, _______, _______
     ),
@@ -212,32 +236,46 @@ static void render_qmk_logo(void) {
 
   oled_write_P(qmk_logo, false);
 }
+static void get_modifyer_status(void) {
+    // check for active modifyer layer
+    switch (get_highest_layer(layer_state)) {
+        case LOWER:
+            strncpy(mod_info, "Lower\n", 15);
+            break;
+        case RAISE:
+            strncpy(mod_info, "Raise\n", 15);
+            break;
+        case NAV:
+            strncpy(mod_info, "Navigation\n", 15);
+            break;
+        case ADJUST:
+            strncpy(mod_info, "Adjust\n", 15);
+            break;
+        default:
+            strncpy(mod_info, "NONE", 15);
+            break;
+    }
+}
 
 static void render_status(void) {
     // QMK Logo and version information
 	render_qmk_logo();
     oled_write_P(PSTR("       Kyria rev1.3\n\n"), false);
-
+    get_modifyer_status();
     // Host Keyboard Layer Status
     oled_write_P(PSTR("Layer: "), false);
-    switch (get_highest_layer(layer_state)) {
-        case QWERTY:
-            oled_write_P(PSTR("Default\n"), false);
-            break;
-        case LOWER:
-            oled_write_P(PSTR("Lower\n"), false);
-            break;
-        case RAISE:
-            oled_write_P(PSTR("Raise\n"), false);
-            break;
-        case NAV:
-            oled_write_P(PSTR("Navigation\n"), false);
-            break;
-        case ADJUST:
-            oled_write_P(PSTR("Adjust\n"), false);
-            break;
-        default:
-            oled_write_P(PSTR("Undefined\n"), false);
+
+    if (strncmp(mod_info, "NONE", 6) == 0) {
+        switch (get_highest_layer(default_layer_state)) {
+            case QWERTZ:
+                oled_write_P(PSTR("Qwertz\n"), false);
+                break;
+            case COLEMAK_DH:
+                oled_write_P(PSTR("Colemak-DH"), false);
+                break;
+        }
+    } else {
+        oled_write(mod_info, false);
     }
 
     // Host Keyboard LED Status
@@ -274,7 +312,7 @@ void oled_task_user(void) {
 void encoder_update_user(uint8_t index, bool clockwise) {
     if (index == 0) {
         switch (biton32(layer_state)) {
-            case QWERTY:
+            case QWERTZ:
                 // History scrubbing. For Adobe products, hold shift while moving
                 // backward to go forward instead.
                 if (clockwise) {
@@ -299,7 +337,7 @@ void encoder_update_user(uint8_t index, bool clockwise) {
         }
     } else if (index == 1) {
         switch (biton32(layer_state)) {
-            case QWERTY:
+            case QWERTZ:
                 // Scrolling with PageUp and PgDn.
                 if (clockwise) {
                     tap_code(KC_PGDN);
@@ -307,11 +345,12 @@ void encoder_update_user(uint8_t index, bool clockwise) {
                     tap_code(KC_PGUP);
                 }
                 break;
-		    default:    
-				if (clockwise) {
-                    tap_code(KC_PGDN);
+		    default:
+                // Volume control.
+                if (clockwise) {
+                    tap_code(KC_VOLU);
                 } else {
-                    tap_code(KC_PGUP);
+                    tap_code(KC_VOLD);
                 }
                 break;
         }

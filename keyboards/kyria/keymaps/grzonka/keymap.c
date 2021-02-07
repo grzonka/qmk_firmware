@@ -271,7 +271,7 @@ static void render_status(void) {
                 oled_write_P(PSTR("Qwertz\n"), false);
                 break;
             case COLEMAK_DH:
-                oled_write_P(PSTR("Colemak-DH"), false);
+                oled_write_P(PSTR("Colemak-DH\n"), false);
                 break;
         }
     } else {
